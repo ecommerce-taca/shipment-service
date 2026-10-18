@@ -1,0 +1,2 @@
+ALTER TABLE shipments
+  ALTER COLUMN currency DROP DEFAULT;
