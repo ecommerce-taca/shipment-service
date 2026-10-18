@@ -1,0 +1,8 @@
+# Contract deltas from original Shipment docs
+
+1. **Quote method:** original spec says `GET /internal/shipping/quote` while its input includes a potentially 16 KiB address snapshot and item array. Candidate v0.2 uses `POST /internal/shipping/quote` with JSON body. This must be mirrored in Order-Commerce's client/API contract.
+2. **Seller carrier comparison:** original Shipment API lists `GET /seller/orders/{orderId}/shipment/carriers`. Since Shipment cannot access Order DB and the agreed decision is that Order passes full shipment context, this endpoint should be an Order-Commerce façade; Order calls Shipment `POST /internal/shipping/carrier-quotes` with trusted snapshots/items. Confirm and update docs on both services.
+3. **Internal auth header:** `X-Internal-Service-Token` is a local candidate header; original docs state internal token/mTLS but do not specify the exact header name or shared implementation. Align before integration.
+4. **Buyer email:** the current source's REST `CreateShipmentRequest` requires a valid `buyer_email`, and Notification's delivered/failed event contract requires it. The future Kafka command contract has not decided whether Order-Commerce supplies that snapshot or an approved owner/source resolves it; do not query Auth User directly from Shipment.
+5. **Carrier support:** source includes MOCK and a fail-closed GHN placeholder; SPX/J&T are reported unavailable until adapters exist. This is an implementation limitation, not a changed business promise.
+6. **Webhook signature:** generic HMAC header is a local test contract only. Do not use it as an asserted GHN production contract.

@@ -1,0 +1,137 @@
+services:
+  shipment-mysql:
+    image: mysql:8.4
+    container_name: shipment-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-local_root_change_me}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-shipmentdb}
+      MYSQL_USER: ${MYSQL_USER:-shipment}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-shipment_local_only}
+      TZ: UTC
+    ports:
+      - "127.0.0.1:${SHIPMENT_MYSQL_PORT:-15406}:3306"
+    command: ["--default-time-zone=+00:00", "--character-set-server=utf8mb4", "--collation-server=utf8mb4_0900_ai_ci"]
+    volumes:
+      - shipment_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -uroot -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  kafka:
+    image: apache/kafka:3.9.1
+    container_name: shipment-kafka
+    ports:
+      - "127.0.0.1:${SHIPMENT_KAFKA_PORT:-19092}:19092"
+    environment:
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+      KAFKA_LISTENERS: INTERNAL://:9092,EXTERNAL://:19092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:9092,EXTERNAL://localhost:${SHIPMENT_KAFKA_PORT:-19092}
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+    volumes:
+      - shipment_kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+  shipment-topic-init:
+    image: apache/kafka:3.9.1
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      SHIPMENT_EVENTS_TOPIC: ${SHIPMENT_EVENTS_TOPIC:-shipment.events.v1}
+      SHIPMENT_DLQ_TOPIC: ${SHIPMENT_DLQ_TOPIC:-shipment.events.dlq.v1}
+      ORDER_EVENTS_TOPIC: ${ORDER_EVENTS_TOPIC:-order.events.v1}
+      SHIPMENT_CREATE_COMMANDS_TOPIC: ${SHIPMENT_CREATE_COMMANDS_TOPIC:-shipment.commands.v1}
+      SHIPMENT_CONSUMER_DLQ_TOPIC: ${SHIPMENT_CONSUMER_DLQ_TOPIC:-shipment.consumer.dlq.v1}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -eu
+        for topic in "$$SHIPMENT_EVENTS_TOPIC" "$$SHIPMENT_DLQ_TOPIC" "$$ORDER_EVENTS_TOPIC" "$$SHIPMENT_CREATE_COMMANDS_TOPIC" "$$SHIPMENT_CONSUMER_DLQ_TOPIC"; do
+          /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic "$$topic" --partitions 1 --replication-factor 1
+        done
+    restart: "no"
+
+  shipment-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-local}
+      SERVER_PORT: ${SERVER_PORT:-8086}
+      APP_ENV: ${APP_ENV:-local}
+      APP_VERSION: ${APP_VERSION:-0.2.0-SNAPSHOT}
+      DB_URL: ${DB_URL_DOCKER:-jdbc:mysql://shipment-mysql:3306/shipmentdb?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+      DB_USERNAME: ${DB_USERNAME:-shipment}
+      DB_PASSWORD: ${DB_PASSWORD:-shipment_local_only}
+      KAFKA_BOOTSTRAP_SERVERS: ${KAFKA_BOOTSTRAP_SERVERS_DOCKER:-kafka:9092}
+      SHIPMENT_INTERNAL_TOKEN: ${SHIPMENT_INTERNAL_TOKEN:-local-dev-token-change-me}
+      SHIPMENT_OPS_TOKEN: ${SHIPMENT_OPS_TOKEN:-}
+      SHIPMENT_ENFORCE_GATEWAY_HEADERS: ${SHIPMENT_ENFORCE_GATEWAY_HEADERS:-true}
+      SHIPMENT_MOCK_ENABLED: ${SHIPMENT_MOCK_ENABLED:-true}
+      GHN_ENABLED: ${GHN_ENABLED:-false}
+      GHN_BASE_URL: ${GHN_BASE_URL:-}
+      GHN_TOKEN: ${GHN_TOKEN:-}
+      GHN_SHOP_ID: ${GHN_SHOP_ID:-}
+      SHIPMENT_KAFKA_PUBLISHER_ENABLED: ${SHIPMENT_KAFKA_PUBLISHER_ENABLED:-true}
+      SHIPMENT_KAFKA_CONSUMER_ENABLED: ${SHIPMENT_KAFKA_CONSUMER_ENABLED:-false}
+      SHIPMENT_CREATE_CONSUMER_ENABLED: ${SHIPMENT_CREATE_CONSUMER_ENABLED:-true}
+      SHIPMENT_EVENTS_TOPIC: ${SHIPMENT_EVENTS_TOPIC:-shipment.events.v1}
+      SHIPMENT_DLQ_TOPIC: ${SHIPMENT_DLQ_TOPIC:-shipment.events.dlq.v1}
+      ORDER_EVENTS_TOPIC: ${ORDER_EVENTS_TOPIC:-order.events.v1}
+      SHIPMENT_CREATE_COMMANDS_TOPIC: ${SHIPMENT_CREATE_COMMANDS_TOPIC:-shipment.commands.v1}
+      SHIPMENT_CREATE_CONSUMER_GROUP_ID: ${SHIPMENT_CREATE_CONSUMER_GROUP_ID:-shipment-service-create-v1}
+      SHIPMENT_CONSUMER_DLQ_TOPIC: ${SHIPMENT_CONSUMER_DLQ_TOPIC:-shipment.consumer.dlq.v1}
+      SHIPMENT_CONSUMER_RETRY_COUNT: ${SHIPMENT_CONSUMER_RETRY_COUNT:-3}
+      SHIPMENT_COMMAND_POLL_DELAY_MS: ${SHIPMENT_COMMAND_POLL_DELAY_MS:-250}
+      SHIPMENT_COMMAND_LEASE_SECONDS: ${SHIPMENT_COMMAND_LEASE_SECONDS:-120}
+      SHIPMENT_RECONCILIATION_DELAY_MS: ${SHIPMENT_RECONCILIATION_DELAY_MS:-60000}
+      SHIPMENT_KAFKA_SEND_TIMEOUT_MS: ${SHIPMENT_KAFKA_SEND_TIMEOUT_MS:-15000}
+      SHIPMENT_OUTBOX_LEASE_SECONDS: ${SHIPMENT_OUTBOX_LEASE_SECONDS:-60}
+      OUTBOX_POLL_DELAY_MS: ${OUTBOX_POLL_DELAY_MS:-1000}
+      SPRING_KAFKA_PRODUCER_RETRIES: ${SPRING_KAFKA_PRODUCER_RETRIES:-3}
+      SPRING_KAFKA_PRODUCER_REQUEST_TIMEOUT_MS: ${SPRING_KAFKA_PRODUCER_REQUEST_TIMEOUT_MS:-5000}
+      SPRING_KAFKA_PRODUCER_DELIVERY_TIMEOUT_MS: ${SPRING_KAFKA_PRODUCER_DELIVERY_TIMEOUT_MS:-10000}
+      SHIPMENT_WEBHOOK_ALLOWED_IPS: ${SHIPMENT_WEBHOOK_ALLOWED_IPS:-127.0.0.1,::1}
+      SHIPMENT_WEBHOOK_MOCK_SECRET: ${SHIPMENT_WEBHOOK_MOCK_SECRET:-local-mock-webhook-secret}
+      SHIPMENT_WEBHOOK_GHN_SECRET: ${SHIPMENT_WEBHOOK_GHN_SECRET:-}
+      SHIPMENT_WEBHOOK_SPX_SECRET: ${SHIPMENT_WEBHOOK_SPX_SECRET:-}
+      SHIPMENT_WEBHOOK_JT_SECRET: ${SHIPMENT_WEBHOOK_JT_SECRET:-}
+    ports:
+      - "127.0.0.1:${SHIPMENT_HTTP_PORT:-18086}:${SERVER_PORT:-8086}"
+    depends_on:
+      shipment-mysql:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      shipment-topic-init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "curl --fail --silent http://localhost:${SERVER_PORT:-8086}/health/ready >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+    restart: unless-stopped
+
+volumes:
+  shipment_mysql_data:
+  shipment_kafka_data:
