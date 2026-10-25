@@ -19,6 +19,13 @@ class ShipmentStateMachineTest {
     }
 
     @Test
+    void allowsCancellationBeforePickupAndCarrierResumptionAfterFailure() {
+        assertTrue(ShipmentStateMachine.canTransition(ShipmentStatus.CREATED, ShipmentStatus.CANCELLED));
+        assertTrue(ShipmentStateMachine.canTransition(ShipmentStatus.FAILED, ShipmentStatus.IN_TRANSIT));
+        assertFalse(ShipmentStateMachine.canTransition(ShipmentStatus.FAILED, ShipmentStatus.DELIVERED));
+    }
+
+    @Test
     void reconciliationCanResolveOnlyToKnownOutcome() {
         assertTrue(ShipmentStateMachine.canTransition(ShipmentStatus.PENDING_RECONCILIATION, ShipmentStatus.CREATED));
         assertTrue(ShipmentStateMachine.canTransition(ShipmentStatus.PENDING_RECONCILIATION, ShipmentStatus.CANCELLED));

@@ -306,6 +306,23 @@ class ShipmentCurrencyTest {
     }
 
     @Test
+    void newKeyForExistingOrderShopReturnsStoredShipmentWithoutApplyingChangedPayload() throws Exception {
+        quoteResult.set(quote(20000L, "VND", Instant.now().plusSeconds(300)));
+        when(shipments.findByOrderIdAndShopId("order-1", "shop-1"))
+                .thenAnswer(invocation -> Optional.ofNullable(storedShipment.get()));
+        var original = commands.create("first-key", request("VND", 30000));
+
+        var repeatedWithNewKey = commands.create("different-key", request("VND", 45000));
+
+        assertTrue(repeatedWithNewKey.replayed());
+        assertEquals(original.shipment().getId(), repeatedWithNewKey.shipment().getId());
+        assertEquals(30000L, repeatedWithNewKey.shipment().getCheckoutShippingFee());
+        assertNotEquals(45000L, repeatedWithNewKey.shipment().getCheckoutShippingFee());
+        verify(adapter, times(1)).quote(any(JsonNode.class), any(JsonNode.class), anyList());
+        verify(adapter, times(1)).create(anyString(), anyString(), any(JsonNode.class));
+    }
+
+    @Test
     void quoteWithDifferentCurrencyIsRejectedBeforeCreatingShipment() {
         ShipmentException error = assertThrows(ShipmentException.class,
                 () -> commands.create("mismatch-key", request("USD", 30000)));
