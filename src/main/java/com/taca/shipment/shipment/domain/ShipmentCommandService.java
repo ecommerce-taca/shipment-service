@@ -190,7 +190,7 @@ public class ShipmentCommandService {
             ShipmentEntity shipment = ShipmentEntity.pending(req.order_id(), req.checkout_group_id(), req.shop_id(),
                     req.buyer_user_id(), req.buyer_email(), carrier, req.from_address_snapshot(),
                     req.to_address_snapshot(), legacyEffectiveFee, req.shipping_fee(), carrierQuotedFee, currency,
-                    req.cod_amount(), minDays, maxDays, key);
+                    req.cod_amount(), minDays, maxDays, key, req.order_code());
             shipments.saveAndFlush(shipment);
             persistItems(shipment, req);
             idempotencies.save(IdempotencyEntity.processing(key, "CREATE", hash, shipment.getId()));
@@ -362,6 +362,8 @@ public class ShipmentCommandService {
         Map<String, Object> p = new LinkedHashMap<>();
         p.put("shipment_id", ShipmentIds.format(s.getId()));
         p.put("order_id", s.getOrderId());
+        if (s.getOrderCode() != null)
+            p.put("order_code", s.getOrderCode());
         p.put("shop_id", s.getShopId());
         p.put("carrier", s.getCarrier().apiValue());
         p.put("tracking_code", s.getTrackingCode());
@@ -395,6 +397,8 @@ public class ShipmentCommandService {
         Map<String, Object> m = new LinkedHashMap<>();
         m.put("shipment_id", ShipmentIds.format(s.getId()));
         m.put("order_id", s.getOrderId());
+        if (s.getOrderCode() != null)
+            m.put("order_code", s.getOrderCode());
         m.put("shop_id", s.getShopId());
         m.put("carrier", s.getCarrier().apiValue());
         m.put("tracking_code", s.getTrackingCode());

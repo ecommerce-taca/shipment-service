@@ -59,7 +59,7 @@ public class TrustedContextFilter extends OncePerRequestFilter {
                 if (opsToken == null || opsToken.isBlank() || suppliedOpsToken == null
                         || !constantTimeEquals(opsToken, suppliedOpsToken)
                         || blank(operatorId) || operatorId.length() > 128
-                        || (!hasRole(roles, "ADMIN") && !hasRole(roles, "SHIPMENT_COMMAND_REPLAY"))) {
+                        || (!isAdmin(roles) && !hasRole(roles, "SHIPMENT_COMMAND_REPLAY"))) {
                     writeError(res, 403, "SHIPMENT_FORBIDDEN", "Authorized operator context required", req);
                     return;
                 }
@@ -71,17 +71,22 @@ public class TrustedContextFilter extends OncePerRequestFilter {
                 writeError(res, 401, "SHIPMENT_UNAUTHENTICATED", "Trusted Gateway actor context required", req);
                 return;
             }
-            if (path.contains("/seller/") && !hasRole(roles, "SELLER") && !hasRole(roles, "SHOP_STAFF")
-                    && !hasRole(roles, "ADMIN")) {
+            if (path.contains("/seller/") && !hasRole(roles, "SELLER") && !hasRole(roles, "SELLER_STAFF")
+                    && !hasRole(roles, "SHOP_STAFF") && !isAdmin(roles)) {
                 writeError(res, 403, "SHIPMENT_FORBIDDEN", "Seller role required", req);
                 return;
             }
-            if (!path.contains("/seller/") && !hasRole(roles, "BUYER") && !hasRole(roles, "ADMIN")) {
+            if (!path.contains("/seller/") && !hasRole(roles, "BUYER") && !isAdmin(roles)) {
                 writeError(res, 403, "SHIPMENT_FORBIDDEN", "Buyer role required", req);
                 return;
             }
         }
         chain.doFilter(req, res);
+    }
+
+    // Role admin do auth-user cấp là SUPER_ADMIN; giữ ADMIN cho operator/tooling cũ.
+    private boolean isAdmin(String roles) {
+        return hasRole(roles, "SUPER_ADMIN") || hasRole(roles, "ADMIN");
     }
 
     private boolean hasRole(String roles, String expected) {

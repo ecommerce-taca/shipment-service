@@ -95,6 +95,41 @@ class TrustedContextFilterTest {
         assertFalse(chainInvoked.get());
     }
 
+    @Test
+    void acceptsAuthUserSellerStaffAndSuperAdminRoles() throws Exception {
+        String[][] cases = {
+                { "/api/v1/seller/orders/order-1/shipment", "SELLER_STAFF" },
+                { "/api/v1/seller/orders/order-1/shipment", "SUPER_ADMIN" },
+                { "/api/v1/orders/order-1/shipment", "SUPER_ADMIN" },
+                { "/api/v1/seller/orders/order-1/shipment", "SHOP_STAFF" },
+        };
+        for (String[] c : cases) {
+            MockHttpServletRequest request = request(c[0]);
+            request.addHeader("X-User-ID", "user-1");
+            request.addHeader("X-User-Roles", c[1]);
+            MockHttpServletResponse response = new MockHttpServletResponse();
+            AtomicBoolean chainInvoked = new AtomicBoolean();
+
+            filter.doFilter(request, response, (req, res) -> chainInvoked.set(true));
+
+            assertTrue(chainInvoked.get(), c[0] + " with " + c[1]);
+        }
+    }
+
+    @Test
+    void acceptsSuperAdminOperatorForOperationsRoutes() throws Exception {
+        MockHttpServletRequest request = request("/api/v1/internal/ops/shipment-create-commands/id/replay");
+        request.addHeader("X-Internal-Service-Token", INTERNAL_TOKEN);
+        request.addHeader("X-Operator-Token", "test-ops-token");
+        request.addHeader("X-Operator-ID", "operator-1");
+        request.addHeader("X-Operator-Roles", "SUPER_ADMIN");
+        AtomicBoolean chainInvoked = new AtomicBoolean();
+
+        filter.doFilter(request, new MockHttpServletResponse(), (req, res) -> chainInvoked.set(true));
+
+        assertTrue(chainInvoked.get());
+    }
+
     private MockHttpServletRequest request(String path) {
         MockHttpServletRequest request = new MockHttpServletRequest("GET", path);
         request.setRequestURI(path);

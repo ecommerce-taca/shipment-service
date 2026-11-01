@@ -102,7 +102,8 @@ public class ShipmentCreateCommandConsumer {
                     payload.path("cod_amount").asLong(-1),
                     payload.path("shipping_fee").asLong(-1),
                     text(payload, "payment_method"),
-                    text(payload, "currency"));
+                    text(payload, "currency"),
+                    optionalText(payload, "order_code"));
         } catch (Exception ex) {
             throw new PermanentShipmentMessageException("Create command payload does not match schema version 1", ex);
         }
