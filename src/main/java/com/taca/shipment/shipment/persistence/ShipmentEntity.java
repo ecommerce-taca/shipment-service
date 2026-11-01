@@ -24,6 +24,8 @@ public class ShipmentEntity {
     private UUID id;
     @Column(name = "order_id", nullable = false, length = 80)
     private String orderId;
+    @Column(name = "order_code", length = 32)
+    private String orderCode;
     @Column(name = "checkout_group_id", length = 80)
     private String checkoutGroupId;
     @Column(name = "shop_id", nullable = false, length = 80)
@@ -82,9 +84,18 @@ public class ShipmentEntity {
             String buyerEmail, Carrier carrier,
             JsonNode from, JsonNode to, long legacyEffectiveFee, Long checkoutShippingFee, Long carrierQuotedFee,
             String currency, long cod, Integer minDays, Integer maxDays, String key) {
+        return pending(orderId, checkoutGroupId, shopId, buyerUserId, buyerEmail, carrier, from, to,
+                legacyEffectiveFee, checkoutShippingFee, carrierQuotedFee, currency, cod, minDays, maxDays, key, null);
+    }
+
+    public static ShipmentEntity pending(String orderId, String checkoutGroupId, String shopId, String buyerUserId,
+            String buyerEmail, Carrier carrier,
+            JsonNode from, JsonNode to, long legacyEffectiveFee, Long checkoutShippingFee, Long carrierQuotedFee,
+            String currency, long cod, Integer minDays, Integer maxDays, String key, String orderCode) {
         var s = new ShipmentEntity();
         s.id = UuidV7.generate();
         s.orderId = orderId;
+        s.orderCode = orderCode;
         s.checkoutGroupId = checkoutGroupId;
         s.shopId = shopId;
         s.buyerUserId = buyerUserId;
@@ -130,6 +141,10 @@ public class ShipmentEntity {
 
     public String getOrderId() {
         return orderId;
+    }
+
+    public String getOrderCode() {
+        return orderCode;
     }
 
     public String getCheckoutGroupId() {

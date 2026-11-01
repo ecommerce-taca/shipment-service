@@ -168,6 +168,31 @@ class ShipmentCurrencyTest {
     }
 
     @Test
+    void orderCodeIsStoredAndEmittedForNotificationTemplates() throws Exception {
+        quoteResult.set(quote(20000L, "VND", Instant.now().plusSeconds(300)));
+        var base = request("VND", 30000);
+        var withCode = new CreateShipmentRequest(base.order_id(), base.checkout_group_id(), base.shop_id(),
+                base.buyer_user_id(), base.buyer_email(), base.carrier(), base.from_address_snapshot(),
+                base.to_address_snapshot(), base.items(), base.cod_amount(), base.shipping_fee(),
+                base.payment_method(), base.currency(), "TC-20260830-0001");
+
+        var result = commands.create("create-order-code", withCode);
+
+        assertEquals("TC-20260830-0001", result.shipment().getOrderCode());
+        assertEquals("TC-20260830-0001", eventPayload.get().get("order_code"));
+        assertEquals("TC-20260830-0001", commands.view(result.shipment()).get("order_code"));
+    }
+
+    @Test
+    void orderCodeIsOmittedWhenCallerDoesNotSendIt() throws Exception {
+        quoteResult.set(quote(20000L, "VND", Instant.now().plusSeconds(300)));
+        var result = commands.create("create-no-order-code", request("VND", 30000));
+
+        assertNull(result.shipment().getOrderCode());
+        assertTrue(!eventPayload.get().containsKey("order_code"));
+    }
+
+    @Test
     void createAndLookupApiResponsesSerializeExplicitFeeFields() throws Exception {
         quoteResult.set(quote(20000L, "VND", Instant.now().plusSeconds(300)));
         ShipmentController controller = new ShipmentController(shipments, events, commands);
